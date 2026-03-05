@@ -1,0 +1,91 @@
+---
+title: "Exploratory Analysis"
+author: "Ellie Kuskie"
+format: pdf
+editor: visual
+---
+
+## Load in Packages
+
+```{r}
+# load in necessary packages
+library("tidyverse")
+library("brms")
+library("ggeffects")
+library("readxl")
+```
+
+## Read in Data
+
+```{r}
+# read in the data from the excel file
+Poll_Data <- read_xlsx("Ellie_ChiSquare.xlsx", sheet = 1)
+
+head(Poll_Data)
+
+
+```
+
+## Flower Shape Dataframes
+
+```{r}
+# Create new dataframe 
+Fl_Shape <- Poll_Data %>% 
+  # used the select function to keep only 3 columns
+  select(PollinatorOrder, PollinatorFamily, PollGenusSpeciesUSE, FlowerShape) %>% 
+  # Get rid of flowers with unknown shape
+  filter(FlowerShape != "U")
+
+
+# create new dataframe for just bees
+Fl_ShapeSp <- Fl_Shape %>% 
+  # use mutate to create new column to separate honey bees from wild bees
+  mutate(BeeType = ifelse(Fl_Shape$PollGenusSpeciesUSE == "Apis mellifera",
+    "Honey Bee", 
+    "Wild Bee")) %>% 
+  # Filter dataframe to just include hymenoptera and get rid of non-bees
+  filter(PollinatorOrder == "Hymenoptera", PollinatorFamily != "Agridae")
+  )
+
+# check it filtered the families correctly
+print(unique(Fl_ShapeSp$PollinatorFamily))
+```
+
+### Exploratory Graphs
+
+```{r}
+# Exploratory Graph based on Order and FLower Shape
+ggplot(Fl_Shape, aes(PollinatorOrder, fill = FlowerShape)) +
+  # make a stacked bar plot to see differences in percent visitation frequency among orders
+  geom_bar(position = "fill")
+```
+
+```{r}
+# Exploratory Graph based on Bee Type and FLower Shape
+ggplot(Fl_ShapeSp, aes(BeeType, fill = FlowerShape)) +
+  # make a stacked bar plot to see differences in percent visitation frequency among orders
+  geom_bar(position = "fill")
+```
+
+### Contingency Tables
+
+```{r}
+# Create contingency table for shape and pollinator order for easier analysis
+ShapeOrder <- table(
+  Fl_Shape$FlowerShape, Fl_Shape$PollinatorOrder)
+# print to make sure it works
+print(ShapeOrder)
+```
+
+```{r}
+# Create contingency table for shape and Bee Type for easier analysis
+ShapeBee <- table(
+  Fl_ShapeSp$FlowerShape, Fl_ShapeSp$BeeType)
+# print to make sure it works
+print(ShapeBee)
+
+b <- chisq.test(ShapeOrder)
+print(b)
+```
+
+## Flower Color Dataframes

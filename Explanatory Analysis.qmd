@@ -1,0 +1,6 @@
+---
+title: "Explanatory Analysis"
+author: "Ellie Kuskie"
+format: pdf
+editor: visual
+---
