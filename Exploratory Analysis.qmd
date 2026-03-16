@@ -13,6 +13,7 @@ library("tidyverse")
 library("brms")
 library("ggeffects")
 library("readxl")
+library("RColorBrewer")
 ```
 
 ## Read in Data
@@ -20,10 +21,8 @@ library("readxl")
 ```{r}
 # read in the data from the excel file
 Poll_Data <- read_xlsx("Ellie_ChiSquare.xlsx", sheet = 1)
-
+# make sure the data file is in correctly
 head(Poll_Data)
-
-
 ```
 
 ## Flower Shape Dataframes
@@ -31,7 +30,7 @@ head(Poll_Data)
 ```{r}
 # Create new dataframe 
 Fl_Shape <- Poll_Data %>% 
-  # used the select function to keep only 3 columns
+  # used the select function to keep only 4 columns
   select(PollinatorOrder, PollinatorFamily, PollGenusSpeciesUSE, FlowerShape) %>% 
   # Get rid of flowers with unknown shape
   filter(FlowerShape != "U")
@@ -45,10 +44,26 @@ Fl_ShapeSp <- Fl_Shape %>%
     "Wild Bee")) %>% 
   # Filter dataframe to just include hymenoptera and get rid of non-bees
   filter(PollinatorOrder == "Hymenoptera", PollinatorFamily != "Agridae")
-  )
 
 # check it filtered the families correctly
 print(unique(Fl_ShapeSp$PollinatorFamily))
+```
+
+```{r}
+# remove uncessary columns
+Fl_Shape_Order <- Fl_Shape %>% 
+  select(PollinatorOrder, FlowerShape) 
+
+# data frame of 2 flower shapes I want to focus on
+Fl_Shape_Final <- Fl_Shape_Order %>%  
+  group_by(PollinatorOrder, FlowerShape) %>% 
+  summarize(n = n()) %>% 
+  mutate(total = sum(n),
+         prop = n / sum(n)) %>% 
+  ungroup() %>% 
+  filter(FlowerShape == "Dish" | FlowerShape == "Tube")
+
+Fl_Shape_Final
 ```
 
 ### Exploratory Graphs
@@ -75,6 +90,9 @@ ShapeOrder <- table(
   Fl_Shape$FlowerShape, Fl_Shape$PollinatorOrder)
 # print to make sure it works
 print(ShapeOrder)
+# easy frequentist statistical analysis to see potential alongside graph
+a <- chisq.test(ShapeOrder)
+print(a)
 ```
 
 ```{r}
@@ -83,9 +101,189 @@ ShapeBee <- table(
   Fl_ShapeSp$FlowerShape, Fl_ShapeSp$BeeType)
 # print to make sure it works
 print(ShapeBee)
-
-b <- chisq.test(ShapeOrder)
+# easy frequentist statistical analysis to see potential alongside graph
+b <- chisq.test(ShapeBee)
 print(b)
 ```
 
 ## Flower Color Dataframes
+
+```{r}
+# Create new dataframe 
+Fl_Color <- Poll_Data %>% 
+  # used the select function to keep only 4 columns
+  select(PollinatorOrder, PollinatorFamily, PollGenusSpeciesUSE, SingleFlColor) %>% 
+  # Get rid of flowers with unknown color
+  filter(SingleFlColor != "U", SingleFlColor != "None")
+
+print(unique(Fl_Color$SingleFlColor))
+
+# create new dataframe for just bees
+Fl_ColorSp <- Fl_Color %>% 
+  # use mutate to create new column to separate honey bees from wild bees
+  mutate(BeeType = ifelse(Fl_Color$PollGenusSpeciesUSE == "Apis mellifera",
+    "Honey Bee", 
+    "Wild Bee")) %>% 
+  # Filter dataframe to just include hymenoptera and get rid of non-bees
+  filter(PollinatorOrder == "Hymenoptera", PollinatorFamily != "Agridae")
+
+# check it filtered the families correctly
+print(unique(Fl_ShapeSp$PollinatorFamily))
+```
+
+### Exploratory Graphs
+
+```{r}
+# Exploratory Graph based on Order and FLower Color
+ggplot(Fl_Color, aes(PollinatorOrder, fill = SingleFlColor)) +
+  # make a stacked bar plot to see differences in percent visitation frequency among orders
+  geom_bar(position = "fill")
+```
+
+```{r}
+# Exploratory Graph based on Bee Type and FLower Shape
+ggplot(Fl_ColorSp, aes(BeeType, fill = SingleFlColor)) +
+  # make a stacked bar plot to see differences in percent visitation frequency among orders
+  geom_bar(position = "fill")
+```
+
+### Contingency Tables
+
+```{r}
+# Create contingency table for color and order for easier analysis
+ColorOrder <- table(
+  Fl_Color$SingleFlColor, Fl_Color$PollinatorOrder)
+# print to make sure it works
+print(ColorOrder)
+# easy frequentist statistical analysis to see potential alongside graph
+c <- chisq.test(ColorOrder)
+print(c)
+```
+
+```{r}
+# Create contingency table for color and order for easier analysis
+ColorBee <- table(
+  Fl_ColorSp$SingleFlColor, Fl_ColorSp$BeeType)
+# print to make sure it works
+print(ColorBee)
+# easy frequentist statistical analysis to see potential alongside graph
+d <- chisq.test(ColorBee)
+print(d)
+```
+
+## Testing brms models for bayesian stats Tube Flower
+
+```{r}
+# Create new dataframe for just tubular flowers
+Tube_Fl_Order <- Fl_Shape_Final %>% 
+  filter(FlowerShape == "Tube")
+# Print dataframe to see if it workde correctly
+Tube_Fl_Order
+
+m.Tube_Fl_Order <- brm(data = Tube_Fl_Order,
+   # Made a beta_binomial distribution and used link = "identity" to not have to back transform values
+   family = beta_binomial(link = "identity", link_phi = "identity"),
+   # categorical model using pollinator order
+   n | trials(total) ~ 0 + PollinatorOrder,
+   # iterations and warmup alongside number of chains
+   iter = 4000, warmup = 2000, chains = 4, cores = 4,
+   # setting priors reletively broadly
+   prior = c(prior(beta(2, 6), class = "b", dpar = "mu", lb = 0, ub = 1),
+            prior(exponential(0.001), class = "phi", lb = 0)),
+   file = "output/m.Tube_Fl_Order"
+)
+
+# viewing results of model
+summary(m.Tube_Fl_Order)
+# show posterior plots and chains to assess model 
+plot(m.Tube_Fl_Order)
+```
+
+```{r}
+m.Tube_Fl_Order1 <- 
+  brm(data = Tube_Fl_Order, # Give the model the data
+      # Chose a binomial distribution
+      family = binomial(link = "logit"),
+      # Specified the model 
+      n | trials(total) ~ 0 + PollinatorOrder,
+      # parameters set with default priors
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      file = "output/m.Tube_Fl_Order1"
+    )
+
+# viewing results of model
+summary(m.Tube_Fl_Order1)
+# show posterior plots and chains to assess model 
+plot(m.Tube_Fl_Order1)
+```
+
+```{r}
+# assess model accuracies to see which is better
+waic(m.Tube_Fl_Order)
+waic(m.Tube_Fl_Order1)
+```
+
+```{r}
+# assess model accuracies
+loo(m.Tube_Fl_Order, moment_match = TRUE)
+loo(m.Tube_Fl_Order1, moment_match = TRUE)
+```
+
+## Testing brms models for bayesian stats Tube Flower
+
+```{r}
+# Create new dataframe for just dish flowers
+Dish_Fl_Order <- Fl_Shape_Final %>% 
+  filter(FlowerShape == "Dish")
+# Print dataframe to see if it workde correctly
+Dish_Fl_Order
+
+m.Dish_Fl_Order <- brm(data = Dish_Fl_Order,
+   # Made a beta_binomial distribution and used link = "identity" to not have to back transform values
+   family = beta_binomial(link = "identity", link_phi = "identity"),
+   # categorical model using pollinator order
+   n | trials(total) ~ 0 + PollinatorOrder,
+   # iterations and warmup alongside number of chains
+   iter = 4000, warmup = 2000, chains = 4, cores = 4,
+   # setting priors reletively broadly
+   prior = c(prior(beta(20, 60), class = "b", dpar = "mu", lb = 0, ub = 1),
+            prior(exponential(0.001), class = "phi", lb = 0)),
+   file = "output/m.Dish_Fl_Order"
+)
+
+# viewing results of model
+summary(m.Dish_Fl_Order)
+# show posterior plots and chains to assess model 
+plot(m.Dish_Fl_Order)
+```
+
+```{r}
+m.Dish_Fl_Order1 <- 
+  brm(data = Dish_Fl_Order, # Give the model the data
+      # Chose a binomial distribution
+      family = binomial(link = "logit"),
+      # Specified the model 
+      n | trials(total) ~ 0 + PollinatorOrder,
+      # parameters set with default priors
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      file = "output/m.Dish_Fl_Order1"
+    )
+
+# viewing results of model
+summary(m.Dish_Fl_Order1)
+# show posterior plots and chains to assess model 
+plot(m.Dish_Fl_Order1)
+# I am having a terrible time with these categorical models. get me out!!!!! They don't make sense to me (I should have picked non-categorical data butoh whale)
+```
+
+```{r}
+# assess model accuracies to see which is better
+waic(m.Dish_Fl_Order)
+waic(m.Dish_Fl_Order1)
+```
+
+```{r}
+# assess model accuracies
+loo(m.Dish_Fl_Order, moment_match = TRUE)
+loo(m.Dish_Fl_Order1, moment_match = TRUE)
+```
