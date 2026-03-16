@@ -112,7 +112,7 @@ print(b)
 # Create new dataframe 
 Fl_Color <- Poll_Data %>% 
   # used the select function to keep only 4 columns
-  select(PollinatorOrder, PollinatorFamily, PollGenusSpeciesUSE, SingleFlColor) %>% 
+  select(PollinatorOrder, PollinatorFamily, PollGenusSpeciesUSE, SingleFlColor) %>%
   # Get rid of flowers with unknown color
   filter(SingleFlColor != "U", SingleFlColor != "None")
 
@@ -229,7 +229,7 @@ loo(m.Tube_Fl_Order, moment_match = TRUE)
 loo(m.Tube_Fl_Order1, moment_match = TRUE)
 ```
 
-## Testing brms models for bayesian stats Tube Flower
+## Testing brms models for bayesian stats Dish Flower
 
 ```{r}
 # Create new dataframe for just dish flowers
@@ -246,7 +246,7 @@ m.Dish_Fl_Order <- brm(data = Dish_Fl_Order,
    # iterations and warmup alongside number of chains
    iter = 4000, warmup = 2000, chains = 4, cores = 4,
    # setting priors reletively broadly
-   prior = c(prior(beta(20, 60), class = "b", dpar = "mu", lb = 0, ub = 1),
+   prior = c(prior(beta(2, 6), class = "b", dpar = "mu", lb = 0, ub = 1),
             prior(exponential(0.001), class = "phi", lb = 0)),
    file = "output/m.Dish_Fl_Order"
 )

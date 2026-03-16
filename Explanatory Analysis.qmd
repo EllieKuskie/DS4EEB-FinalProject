@@ -4,3 +4,159 @@ author: "Ellie Kuskie"
 format: pdf
 editor: visual
 ---
+
+## Getting in The Data and Wrangling
+
+```{r}
+# load in necessary packages
+library("tidyverse")
+library("brms")
+library("ggeffects")
+library("readxl")
+library("RColorBrewer")
+```
+
+```{r}
+# read in the data from the excel file
+Poll_Data <- read_xlsx("Ellie_ChiSquare.xlsx", sheet = 1)
+# make sure the data file is in correctly
+head(Poll_Data)
+```
+
+```{r}
+# Create new dataframe for just flower shape 
+Fl_Shape <- Poll_Data %>% 
+  # used the select function to keep only 4 columns
+  select(PollinatorOrder, PollinatorFamily, PollGenusSpeciesUSE, FlowerShape) %>% 
+  # Get rid of flowers with unknown shape
+  filter(FlowerShape != "U")
+
+# remove uncessary columns to just focus on pollinator order
+Fl_Shape_Order <- Fl_Shape %>% 
+  select(PollinatorOrder, FlowerShape) 
+
+# data frame of 2 flower shapes I want to focus on (removed other flower shapes)
+Fl_Shape_Final <- Fl_Shape_Order %>%  
+  group_by(PollinatorOrder, FlowerShape) %>% 
+  summarize(n = n()) %>% 
+  mutate(total = sum(n),
+         prop = n / sum(n)) %>% 
+  ungroup() %>% 
+  filter(FlowerShape == "Dish" | FlowerShape == "Tube")
+
+# Create new dataframe for just tubular flowers
+Tube_Fl_Order <- Fl_Shape_Final %>% 
+  filter(FlowerShape == "Tube")
+
+# Create new dataframe for just dish flowers
+Dish_Fl_Order <- Fl_Shape_Final %>% 
+  filter(FlowerShape == "Dish")
+
+Dish_Fl_Order
+```
+
+## Statistical Analysis
+
+```{r}
+# Create new dataframe for just tubular flowers
+Tube_Fl_Order <- Fl_Shape_Final %>% 
+  filter(FlowerShape == "Tube")
+# Print dataframe to see if it workde correctly
+Tube_Fl_Order
+
+m.Tube_Fl_Order <- brm(data = Tube_Fl_Order,
+   # Made a beta_binomial distribution and used link = "identity" to not have to back transform values
+   family = beta_binomial(link = "identity", link_phi = "identity"),
+   # categorical model using pollinator order
+   n | trials(total) ~ 0 + PollinatorOrder,
+   # iterations and warmup alongside number of chains
+   iter = 4000, warmup = 2000, chains = 4, cores = 4,
+   # setting priors reletively broadly
+   prior = c(prior(beta(2, 6), class = "b", dpar = "mu", lb = 0, ub = 1),
+            prior(exponential(0.001), class = "phi", lb = 0)),
+   file = "output/m.Tube_Fl_Order"
+)
+
+# viewing results of model
+summary(m.Tube_Fl_Order)
+# show posterior plots and chains to assess model 
+plot(m.Tube_Fl_Order)
+```
+
+```{r}
+# Create new dataframe for just dish flowers
+Dish_Fl_Order <- Fl_Shape_Final %>% 
+  filter(FlowerShape == "Dish")
+# Print dataframe to see if it workde correctly
+Dish_Fl_Order
+
+m.Dish_Fl_Order <- brm(data = Dish_Fl_Order,
+   # Made a beta_binomial distribution and used link = "identity" to not have to back transform values
+   family = beta_binomial(link = "identity", link_phi = "identity"),
+   # categorical model using pollinator order
+   n | trials(total) ~ 0 + PollinatorOrder,
+   # iterations and warmup alongside number of chains
+   iter = 4000, warmup = 2000, chains = 4, cores = 4,
+   # setting priors reletively broadly
+   prior = c(prior(beta(2, 6), class = "b", dpar = "mu", lb = 0, ub = 1),
+            prior(exponential(0.001), class = "phi", lb = 0)),
+   file = "output/m.Dish_Fl_Order"
+)
+
+# viewing results of model
+summary(m.Dish_Fl_Order)
+# show posterior plots and chains to assess model 
+plot(m.Dish_Fl_Order)
+```
+
+For both of these models we can see that the Rhat values are equal to 1, the posteriors all have one clear hump, and the chains converge. With this we can conclude that the model ran well.
+
+Biologically this means that 16% of Fly visits will be to tubular flowers with a 95% credible interval from \[11% - 23%\], 37% of Bee visits will be to tubular flowers with a 95% credible interval from \[30% - 43%\], and 41% of Butterfly/Moth visits will be to tubular flowers with a 95% credible interval from \[28% - 54%\].
+
+Biologically this means that 66% of Fly visits will be to dish flowers with a 95% credible interval from \[45% - 75%\], 49% of Bee visits will be to dish flowers with a 95% credible interval from \[33% - 46%\], and 40% of Butterfly/Moth visits will be to tubular flowers with a 95% credible interval from \[25% - 55%\].
+
+## Graphs
+
+```{r}
+# create graph for visitation frequency on tubular flowers
+TubeGraph <- ggplot(Tube_Fl_Order, aes(PollinatorOrder, y = prop)) +
+  # make it a bar plot and set fill = PollinatorOrder for color later
+  geom_bar(stat = "identity", mapping = aes(fill = PollinatorOrder)) +
+  # Change x and y axis 
+  labs(x = "Pollinator Order",
+       y = "Visitation Frequency") +
+  # get rid of gap at y = 0 and make y-axis percentage
+  scale_y_continuous(expand = c(0, 0), labels = scales::percent, limits = c(NA, 1)) +
+  # change theme
+  theme_bw() +
+  # remove legend
+  theme(legend.position = "none") +
+  # change colors of bars to look nicer
+  scale_fill_brewer(palette = "Accent")
+  
+# print out graph
+TubeGraph
+```
+
+```{r}
+# create graph for visitation frequency on dish flowers
+DishGraph <- ggplot(Dish_Fl_Order, aes(PollinatorOrder, y = prop)) +
+  # make it a bar plot and set fill = PollinatorOrder for color later
+  geom_bar(stat = "identity", mapping = aes(fill = PollinatorOrder)) +
+  # Change x and y axis 
+  labs(x = "Pollinator Order",
+       y = "Visitation Frequency") +
+  # get rid of gap at y = 0 and make y-axis percentage
+  scale_y_continuous(expand = c(0, 0), labels = scales::percent, limits = c(NA, 1)) +
+  # change theme
+  theme_bw() +
+  # remove legend
+  theme(legend.position = "none") +
+  # change colors of bars to look nicer
+  scale_fill_brewer(palette = "Accent")
+  
+# print out graph
+DishGraph
+```
+
+Based on these 2 figures you can see how Diptera or Flies have a strong tendency to visit flowers that are dish shaped. They also have very little tendency to visit tubular flowers when compared to the other orders examined. With Butterflies/moths we can see that they have the exact same visitation frequency to dish and tube flowers; this could indicate a lack of preference, however out data for this order is a bit limited so perhaps with more data a pattern could emerge. With Hymenoptera or Bees we can see that they tend to visit dish flowers a bit more frequently than tubular flowers; this could be due to their mouthparts being more adapted for flowers with less of a distance to nectar (similar to flies). Perhaps it is different for different families of bees, and further analysis could help us to understand this.
